@@ -214,6 +214,10 @@
       <div id="reportBox" style="margin-top:10px;"></div>
     </div>
     <div class="card">
+      <h3 class="sec">⏱ ملخص التأخير (كل الطلاب)</h3>
+      <div id="lateSummary"></div>
+    </div>
+    <div class="card">
       <h3 class="sec">تصدير ونسخ</h3>
       <button class="btn-primary" style="width:100%;margin-bottom:8px;" onclick="exportCSV()">⬇️ تصدير سجل الحضور (Excel / CSV)</button>
       <button class="btn-primary" style="width:100%;margin-bottom:8px;" onclick="exportStudentsCSV()">⬇️ تصدير قائمة الطلاب (Excel / CSV)</button>
@@ -10479,6 +10483,15 @@ function lateChip(s,r){
   if(d>0)return ' <span class="chip chip-absent">متأخر '+d+' د</span>';
   return '';
 }
+function lateMin(sid,r){
+  if(!r||!r.in||r.absent)return 0;
+  const st=students.find(x=>x.id===sid);if(!st)return 0;
+  const g=groups.find(x=>x.id===(r.g||st.groupId));
+  if(!g||!g.start)return 0;
+  const a=timeToMin(r.in),b=timeToMin(g.start);
+  if(a==null||b==null)return 0;
+  return Math.max(0,a-b);
+}
 function editTime(id,field){
   const rec=dayRec(todayKey());const r=rec[id];if(!r)return;
   const v=prompt(field==='in'?'وقت الحضور (مثال 16:30)':'وقت الانصراف (مثال 18:00)',r[field]||nowTime());
@@ -10524,6 +10537,18 @@ function delStudent(id){
   students=students.filter(s=>s.id!==id);
   save();renderStudents();renderToday();renderPay();renderFollow();renderGroups();
 }
+function moveStudent(id){
+  const s=students.find(x=>x.id===id);if(!s)return;
+  const others=groups.filter(g=>g.id!==s.groupId);
+  if(!others.length){toast('مفيش مجموعة تانية تنقله ليها، ضيف مجموعة الأول');return;}
+  const msg='نقل '+s.name+' من '+groupName(s.groupId)+' إلى:\n'+others.map((g,i)=>(i+1)+' - '+g.name).join('\n')+'\nاكتب رقم المجموعة';
+  const v=prompt(msg);if(v===null)return;
+  const g=others[(parseInt(v,10)||0)-1];
+  if(!g){toast('رقم غلط');return;}
+  Object.keys(att).forEach(d=>{const r=att[d][id];if(r&&!r.g)r.g=s.groupId;});
+  s.groupId=g.id;
+  save();renderStudents();renderToday();renderPay();renderFollow();toast('اتنقل '+s.name+' إلى '+g.name+' ✅');
+}
 function openEdit(id){
   const s=students.find(x=>x.id===id);if(!s)return;
   document.getElementById('editId').value=s.id;
@@ -10566,7 +10591,7 @@ function renderStudents(){
     if(s.gphone)meta+=' · ولي الأمر: '+fmtPhone(s.gphone);
     return '<div class="student"><div class="avatar">'+esc((s.name||'؟').charAt(0))+'</div>'
       +'<div class="s-info"><div class="s-name">'+esc(s.name)+'</div><div class="s-meta">'+meta+'</div></div>'
-      +'<div class="actions"><button class="mini b" onclick="openQR(\''+s.id+'\')">QR</button><button class="mini o" onclick="openEdit(\''+s.id+'\')">✏️</button><button class="del" onclick="delStudent(\''+s.id+'\')">✕</button></div></div>';
+      +'<div class="actions"><button class="mini b" onclick="openQR(\''+s.id+'\')">QR</button><button class="mini b" onclick="moveStudent(\''+s.id+'\')">🔄 نقل</button><button class="mini o" onclick="openEdit(\''+s.id+'\')">✏️</button><button class="del" onclick="delStudent(\''+s.id+'\')">✕</button></div></div>';
   }).join('');
   const sel=document.getElementById('reportStudent');
   sel.innerHTML='<option value="">اختر طالب…</option>'+students.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join('');
@@ -10855,20 +10880,29 @@ function renderHistory(){
   if(rows.length===0){box.innerHTML='<div class="empty">مفيش سجلات في اليوم ده.</div>';return;}
   const nameOf=id=>{const s=students.find(x=>x.id===id);return s?s.name:'(طالب محذوف)';};
   const grpOf=id=>{const s=students.find(x=>x.id===id);return s?groupName(s.groupId):'—';};
-  box.innerHTML='<table><tr><th>الطالب</th><th>المجموعة</th><th>حضور</th><th>انصراف</th><th>الحالة</th></tr>'+
-    rows.map(id=>{const r=rec[id];return '<tr><td>'+esc(nameOf(id))+'</td><td>'+esc(grpOf(id))+'</td><td>'+(r.absent?'—':esc(r.in||'—'))+'</td><td>'+(r.absent?'—':esc(r.out||'—'))+'</td><td>'+(r.absent?'غائب':(r.out?'انصرف':'حاضر'))+'</td></tr>';}).join('')+'</table>';
+  box.innerHTML='<table><tr><th>الطالب</th><th>المجموعة</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>التأخير</th></tr>'+
+    rows.map(id=>{const r=rec[id];return '<tr><td>'+esc(nameOf(id))+'</td><td>'+esc(grpOf(id))+'</td><td>'+(r.absent?'—':esc(r.in||'—'))+'</td><td>'+(r.absent?'—':esc(r.out||'—'))+'</td><td>'+(r.absent?'غائب':(r.out?'انصرف':'حاضر'))+'</td><td>'+(lateMin(id,r)>0?'<span class="chip chip-absent">'+lateMin(id,r)+' د</span>':(r.absent?'—':'في الميعاد'))+'</td></tr>';}).join('')+'</table>';
+}
+function renderLateSummary(){
+  const box=document.getElementById('lateSummary');if(!box)return;
+  const rows=students.map(st=>{let n=0,t=0;
+    Object.keys(att).forEach(d=>{const lm=lateMin(st.id,att[d][st.id]);if(lm>0){n++;t+=lm;}});
+    return {name:st.name,g:groupName(st.groupId),n:n,t:t};}).filter(x=>x.n>0).sort((a,b)=>b.t-a.t);
+  box.innerHTML=rows.length?'<table><tr><th>الطالب</th><th>المجموعة</th><th>مرات</th><th>إجمالي الدقائق</th></tr>'+rows.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.g)+'</td><td>'+x.n+'</td><td>'+x.t+' د</td></tr>').join('')+'</table>':'<div class="empty">مفيش تأخير مسجل (لازم المجموعة يكون ليها ميعاد بداية).</div>';
 }
 function renderReport(){
+  renderLateSummary();
   const id=document.getElementById('reportStudent').value;
   const box=document.getElementById('reportBox');
   if(!id){box.innerHTML='';return;}
   const st=students.find(x=>x.id===id);
-  let present=0,absent=0;
+  let present=0,absent=0,lateDays=0,lateTotal=0;
   const days=Object.keys(att).sort().reverse();
   const rows=[];
   days.forEach(d=>{const r=att[d][id];if(!r)return;
     if(r.absent)absent++;else present++;
-    rows.push('<tr><td>'+d+'</td><td>'+(r.absent?'—':esc(r.in||'—'))+'</td><td>'+(r.absent?'—':esc(r.out||'—'))+'</td><td>'+(r.absent?'غائب':'حاضر')+'</td></tr>');});
+    const lm=lateMin(id,r);if(lm>0){lateDays++;lateTotal+=lm;}
+    rows.push('<tr><td>'+d+'</td><td>'+(r.absent?'—':esc(r.in||'—'))+'</td><td>'+(r.absent?'—':esc(r.out||'—'))+'</td><td>'+(r.absent?'غائب':'حاضر')+'</td><td>'+(lm>0?'<span class="chip chip-absent">'+lm+' د</span>':(r.absent?'—':'0'))+'</td></tr>');});
   const payMonths=Object.keys(pay).sort().reverse().filter(m=>pay[m][id]&&pay[m][id].paid);
   let info='';
   if(st){
@@ -10881,9 +10915,10 @@ function renderReport(){
     +'<div class="stat g"><b>'+present+'</b><span>أيام حضور</span></div>'
     +'<div class="stat r"><b>'+absent+'</b><span>أيام غياب</span></div>'
     +'<div class="stat b"><b>'+(present+absent?Math.round(present/(present+absent)*100):0)+'%</b><span>نسبة الحضور</span></div></div>'
+    +'<div class="stats" style="margin-top:8px;"><div class="stat r"><b>'+lateDays+'</b><span>مرات تأخير</span></div><div class="stat r"><b>'+lateTotal+'</b><span>إجمالي دقائق التأخير</span></div><div class="stat b"><b>'+(lateDays?Math.round(lateTotal/lateDays):0)+'</b><span>متوسط التأخير (د)</span></div></div>'
     +info
     +'<div class="fee-note">الشهور المدفوعة: '+(payMonths.length?payMonths.map(esc).join('، '):'ولا شهر لسه')+'</div>'
-    +(rows.length?'<div style="margin-top:8px;"><table><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الحالة</th></tr>'+rows.join('')+'</table></div>':'<div class="empty">مفيش سجلات حضور للطالب ده لسه.</div>');
+    +(rows.length?'<div style="margin-top:8px;"><table><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>التأخير</th></tr>'+rows.join('')+'</table></div>':'<div class="empty">مفيش سجلات حضور للطالب ده لسه.</div>');
 }
 function dl(filename,csv){
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
@@ -10895,9 +10930,9 @@ function exportCSV(){
   if(days.length===0){toast('مفيش بيانات للتصدير');return;}
   const nameOf=id=>{const s=students.find(x=>x.id===id);return s?s.name:'(محذوف)';};
   const grpOf=id=>{const s=students.find(x=>x.id===id);return s?groupName(s.groupId):'';};
-  let csv='التاريخ,الطالب,المجموعة,حضور,انصراف,الحالة\n';
+  let csv='التاريخ,الطالب,المجموعة,حضور,انصراف,الحالة,دقائق التأخير\n';
   days.forEach(d=>{Object.keys(att[d]).forEach(id=>{const r=att[d][id];
-    csv+=[d,nameOf(id),grpOf(id),r.absent?'':r.in||'',r.absent?'':r.out||'',r.absent?'غائب':'حاضر'].map(q).join(',')+'\n';});});
+    csv+=[d,nameOf(id),grpOf(id),r.absent?'':r.in||'',r.absent?'':r.out||'',r.absent?'غائب':'حاضر',r.absent?'':lateMin(id,r)].map(q).join(',')+'\n';});});
   dl('hudur-attendance.csv',csv);toast('تم التصدير ⬇️');
 }
 function exportPayCSV(){
