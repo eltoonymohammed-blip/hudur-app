@@ -112,6 +112,7 @@
     <div class="card">
       <input type="text" id="todaySearch" placeholder="🔍 تسجيل بالاسم: اكتب اسم الطالب…" oninput="renderToday()">
       <div class="chiprow" id="todayGroups"></div>
+      <div id="makeupBox" style="margin-top:8px;"></div>
     </div>
     <div class="stats">
       <div class="stat g"><b id="stIn">0</b><span>حاضر</span></div>
@@ -10644,7 +10645,7 @@ function renderStudents(){
 /* ---- Attendance ---- */
 function mark(id,kind){
   const rec=dayRec(todayKey());
-  if(!rec[id])rec[id]={in:null,out:null,absent:false};
+  if(!rec[id]){const _s=students.find(x=>x.id===id);rec[id]={in:null,out:null,absent:false,g:_s?_s.groupId:''};}
   const r=rec[id];
   if(kind==='in'){r.absent=false;if(!r.in)r.in=nowTime();}
   if(kind==='out'){if(!r.in){toast('سجل الحضور الأول');return;}r.absent=false;if(!r.out)r.out=nowTime();}
@@ -10652,29 +10653,62 @@ function mark(id,kind){
   if(kind==='undo'){rec[id]={in:null,out:null,absent:false};}
   save();renderToday();
 }
+function sessionGroup(){return groups.find(x=>x.id===todayFilter)?todayFilter:'';}
+function markMakeup(id){
+  const sg=sessionGroup();const s=students.find(x=>x.id===id);
+  if(!sg||!s)return;
+  const rec=dayRec(todayKey());
+  if(rec[id]&&rec[id].in&&!rec[id].absent){toast('الطالب مسجل حضوره النهاردة بالفعل');return;}
+  rec[id]={in:nowTime(),out:null,absent:false,g:sg,makeup:true,home:s.groupId};
+  save();renderToday();toast('✅ تعويض: '+s.name+' في '+groupName(sg));
+}
+function makeupPick(){
+  const v=document.getElementById('makeupSel').value;
+  if(!v){toast('اختار الطالب الأول');return;}
+  markMakeup(v);
+}
 function scanMark(id){
   const s=students.find(x=>x.id===id);
   if(!s)return 'كود غير معروف ❌';
   const rec=dayRec(todayKey());
-  if(!rec[id])rec[id]={in:null,out:null,absent:false};
+  const sg=sessionGroup();
+  if(sg&&s.groupId!==sg){
+    const ex=rec[id];
+    if(ex&&ex.makeup&&ex.g===sg){/* already makeup in this group: continue normal flow */}
+    else if(ex&&(ex.in||ex.absent)&&!ex.makeup){return s.name+' سجل النهاردة في مجموعته الأصلية ('+groupName(s.groupId)+')';}
+    else{
+      if(!confirm(s.name+' من مجموعة "'+groupName(s.groupId)+'" مش مجموعة "'+groupName(sg)+'". تسجله حضور تعويض؟'))return 'اتلغى: '+s.name+' مش من المجموعة دي ❌';
+      rec[id]={in:nowTime(),out:null,absent:false,g:sg,makeup:true,home:s.groupId};
+      save();renderToday();return '🔁 تعويض: '+s.name+' ('+rec[id].in+')';
+    }
+  }
+  if(!rec[id])rec[id]={in:null,out:null,absent:false,g:s.groupId};
   const r=rec[id];
   if(r.absent){r.absent=false;r.in=nowTime();save();renderToday();return '✅ حضور: '+s.name+' ('+r.in+')';}
   if(!r.in){r.in=nowTime();save();renderToday();return '✅ حضور: '+s.name+' ('+r.in+')';}
   if(!r.out){r.out=nowTime();save();renderToday();return '👋 انصراف: '+s.name+' ('+r.out+')';}
   return s.name+' سجل حضوره وانصرافه النهاردة ✔️';
 }
+function mkTag(r){return (r&&r.makeup)?' <span class="chip" style="background:#fff3cd;color:#8a6d00">🔁 تعويض'+(r.g?' ('+esc(groupName(r.g))+')':'')+'</span>':'';}
 function statusChip(r){
   if(!r)return '<span class="chip chip-none">لم يسجل</span>';
   if(r.absent)return '<span class="chip chip-absent">غائب</span>';
-  if(r.out)return '<span class="chip chip-out">انصرف '+esc(r.out)+'</span>';
-  if(r.in)return '<span class="chip chip-in">حاضر '+esc(r.in)+'</span>';
+  if(r.out)return '<span class="chip chip-out">انصرف '+esc(r.out)+'</span>'+mkTag(r);
+  if(r.in)return '<span class="chip chip-in">حاضر '+esc(r.in)+'</span>'+mkTag(r);
   return '<span class="chip chip-none">لم يسجل</span>';
 }
 function renderToday(){
   const q=(document.getElementById('todaySearch').value||'').trim();
   const key=todayKey(),rec=att[key]||{};
   document.getElementById('todayGroups').innerHTML=chipsHTML(todayFilter,'today');
-  const list=students.filter(s=>inFlt(s,todayFilter)&&(!q||s.name.indexOf(q)!==-1||(s.phone&&s.phone.indexOf(q)!==-1)));
+  const sg0=sessionGroup();
+  const list=students.filter(s=>(inFlt(s,todayFilter)||(sg0&&rec[s.id]&&rec[s.id].makeup&&rec[s.id].g===sg0))&&(!q||s.name.indexOf(q)!==-1||(s.phone&&s.phone.indexOf(q)!==-1)));
+  (function(){const mb=document.getElementById('makeupBox');if(!mb)return;
+    if(!sg0){mb.innerHTML='<div class="s-meta">اختار مجموعة عشان تسجل حضورها لوحدها. الطالب مش بيدخل مجموعة غير مجموعته إلا تعويض.</div>';return;}
+    const others=students.filter(s=>s.groupId!==sg0&&!(rec[s.id]&&(rec[s.id].in||rec[s.id].absent)));
+    mb.innerHTML='<div class="s-meta">📌 جلسة مجموعة: <b>'+esc(groupName(sg0))+'</b> · الحضور بالمسح بيقبل طلاب المجموعة دي بس، وغيرهم بيتسجلوا تعويض.</div>'
+      +'<div style="display:flex;gap:6px;margin-top:6px;"><select id="makeupSel" style="flex:1;"><option value="">🔁 إضافة طالب تعويض من مجموعة تانية…</option>'+others.map(s=>'<option value="'+s.id+'">'+esc(s.name)+' — '+esc(groupName(s.groupId))+'</option>').join('')+'</select><button class="mini g" onclick="makeupPick()">تسجيل تعويض</button></div>';
+  })();
   let inC=0,outC=0,abC=0;
   const box=document.getElementById('todayList');
   if(students.length===0){box.innerHTML='<div class="empty">مفيش طلاب لسه.<br>روح لتبويب "الطلاب" وضيفهم الأول.</div>';}
@@ -10683,7 +10717,7 @@ function renderToday(){
     const r=rec[s.id];
     if(r&&r.absent)abC++;else if(r&&r.out)outC++;else if(r&&r.in)inC++;
     return '<div class="student"><div class="avatar">'+esc((s.name||'؟').charAt(0))+'</div>'
-      +'<div class="s-info"><div class="s-name">'+esc(s.name)+'</div><div class="s-meta">'+esc(groupName(s.groupId))+(function(){const g=groups.find(x=>x.id===s.groupId);return g&&g.start?' 🕒 '+esc(g.start):'';})()+' '+statusChip(r)+lateChip(s,r)+'</div></div>'
+      +'<div class="s-info"><div class="s-name">'+esc(s.name)+'</div><div class="s-meta">'+esc(groupName(s.groupId))+(function(){const g=groups.find(x=>x.id===((rec[s.id]&&rec[s.id].g)||s.groupId));return g&&g.start?' 🕒 '+esc(g.start):'';})()+' '+statusChip(r)+lateChip(s,r)+'</div></div>'
       +'<div class="actions">'
       +((!r||(!r.in&&!r.absent))?'<button class="mini g" onclick="mark(\''+s.id+'\',\'in\')">حضور</button>':'')
       +((r&&r.in&&!r.out)?'<button class="mini b" onclick="mark(\''+s.id+'\',\'out\')">انصراف</button>':'')
@@ -10925,7 +10959,7 @@ function renderHistory(){
   const nameOf=id=>{const s=students.find(x=>x.id===id);return s?s.name:'(طالب محذوف)';};
   const grpOf=id=>{const s=students.find(x=>x.id===id);return s?groupName(s.groupId):'—';};
   box.innerHTML='<table><tr><th>الطالب</th><th>المجموعة</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>التأخير</th></tr>'+
-    rows.map(id=>{const r=rec[id];return '<tr><td>'+esc(nameOf(id))+'</td><td>'+esc(grpOf(id))+'</td><td>'+(r.absent?'—':esc(r.in||'—'))+'</td><td>'+(r.absent?'—':esc(r.out||'—'))+'</td><td>'+(r.absent?'غائب':(r.out?'انصرف':'حاضر'))+'</td><td>'+(lateMin(id,r)>0?'<span class="chip chip-absent">'+lateMin(id,r)+' د</span>':(r.absent?'—':'في الميعاد'))+'</td></tr>';}).join('')+'</table>';
+    rows.map(id=>{const r=rec[id];return '<tr><td>'+esc(nameOf(id))+'</td><td>'+(r.makeup?esc(groupName(r.g))+' <span class="chip" style="background:#fff3cd;color:#8a6d00">تعويض</span>':esc(grpOf(id)))+'</td><td>'+(r.absent?'—':esc(r.in||'—'))+'</td><td>'+(r.absent?'—':esc(r.out||'—'))+'</td><td>'+(r.absent?'غائب':(r.out?'انصرف':'حاضر'))+'</td><td>'+(lateMin(id,r)>0?'<span class="chip chip-absent">'+lateMin(id,r)+' د</span>':(r.absent?'—':'في الميعاد'))+'</td></tr>';}).join('')+'</table>';
 }
 function renderLateSummary(){
   const box=document.getElementById('lateSummary');if(!box)return;
@@ -10946,7 +10980,7 @@ function renderReport(){
   days.forEach(d=>{const r=att[d][id];if(!r)return;
     if(r.absent)absent++;else present++;
     const lm=lateMin(id,r);if(lm>0){lateDays++;lateTotal+=lm;}
-    rows.push('<tr><td>'+d+'</td><td>'+(r.absent?'—':esc(r.in||'—'))+'</td><td>'+(r.absent?'—':esc(r.out||'—'))+'</td><td>'+(r.absent?'غائب':'حاضر')+'</td><td>'+(lm>0?'<span class="chip chip-absent">'+lm+' د</span>':(r.absent?'—':'0'))+'</td></tr>');});
+    rows.push('<tr><td>'+d+'</td><td>'+(r.absent?'—':esc(r.in||'—'))+'</td><td>'+(r.absent?'—':esc(r.out||'—'))+'</td><td>'+(r.absent?'غائب':'حاضر'+(r.makeup?' (تعويض في '+esc(groupName(r.g))+')':''))+'</td><td>'+(lm>0?'<span class="chip chip-absent">'+lm+' د</span>':(r.absent?'—':'0'))+'</td></tr>');});
   const payMonths=Object.keys(pay).sort().reverse().filter(m=>pay[m][id]&&pay[m][id].paid);
   let info='';
   if(st){
@@ -11029,7 +11063,7 @@ function exportCSV(){
   const grpOf=id=>{const s=students.find(x=>x.id===id);return s?groupName(s.groupId):'';};
   let csv='التاريخ,الطالب,المجموعة,حضور,انصراف,الحالة,دقائق التأخير\n';
   days.forEach(d=>{Object.keys(att[d]).forEach(id=>{const r=att[d][id];
-    csv+=[d,nameOf(id),grpOf(id),r.absent?'':r.in||'',r.absent?'':r.out||'',r.absent?'غائب':'حاضر',r.absent?'':lateMin(id,r)].map(q).join(',')+'\n';});});
+    csv+=[d,nameOf(id),r.makeup?groupName(r.g)+' (تعويض)':grpOf(id),r.absent?'':r.in||'',r.absent?'':r.out||'',r.absent?'غائب':(r.makeup?'حاضر (تعويض)':'حاضر'),r.absent?'':lateMin(id,r)].map(q).join(',')+'\n';});});
   dl('hudur-attendance.csv',csv);toast('تم التصدير ⬇️');
 }
 function exportPayCSV(){
