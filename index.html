@@ -75,7 +75,16 @@
   .phone-meta{direction:ltr;unicode-bidi:embed;}
 
   #printArea{display:none;}
+  .qrinline{display:none;}
+  #qrSheetBody .qgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+  #qrSheetBody .qcard{border:1px dashed #666;padding:8px;text-align:center;}
+  #qrSheetBody .qcard svg{width:150px;height:150px;display:block;margin:0 auto 4px;}
+  #qrSheetBody .qn{font-size:15px;font-weight:700;}
+  #qrSheetBody .qg{font-size:11px;color:#444;}
   @media print{
+    body:not(.printing) header,body:not(.printing) nav,body:not(.printing) .fab,body:not(.printing) .actions,body:not(.printing) .modal,body:not(.printing) .overlay,body:not(.printing) .chiprow,body:not(.printing) #qrSheet{display:none !important;}
+    body:not(.printing) .qrinline{display:block !important;margin-top:4px;}
+    body:not(.printing) .qrinline svg{width:70px;height:70px;}
     body.printing>*:not(#printArea){display:none !important;}
     body.printing #printArea{display:block !important;direction:rtl;font-family:"Segoe UI",Tahoma,Arial,sans-serif;color:#000;background:#fff;padding:0;}
     body{background:#fff !important;padding:0 !important;}
@@ -280,6 +289,14 @@
   </div>
 </div>
 
+<div id="qrSheet" class="hidden" style="position:fixed;inset:0;background:#fff;z-index:60;overflow:auto;padding:12px;direction:rtl;">
+  <div style="position:sticky;top:0;background:#fff;padding:6px 0 10px;display:flex;gap:8px;z-index:2;">
+    <button class="btn-primary" style="flex:1;" onclick="printQRSheet()">🖨️ طباعة</button>
+    <button class="btn-ghost" style="flex:1;" onclick="closeQRSheet()">إغلاق</button>
+  </div>
+  <div id="qrSheetSel" style="margin-bottom:8px;"></div>
+  <div id="qrSheetBody"></div>
+</div>
 <div id="qrModal" class="modal hidden" onclick="if(event.target===this)closeQR()">
   <div class="box">
     <h3 class="sec" id="qrName"></h3>
@@ -10630,13 +10647,13 @@ function renderStudents(){
   fillGroupSelect(document.getElementById('newGroup'),document.getElementById('newGroup').value);
   const list=document.getElementById('studentsList');
   if(students.length===0){list.innerHTML='<div class="empty">مفيش طلاب لسه.</div>';}
-  else list.innerHTML=students.map(s=>{
+  else list.innerHTML='<button class="btn-ghost" style="width:100%;margin-bottom:8px;" onclick="showQRSheet()">🖨️ عرض وطباعة باركود كل الطلاب</button>'+students.map(s=>{
     let meta=esc(groupName(s.groupId));
     if(s.phone)meta+=' · طالب: '+fmtPhone(s.phone);
     if(s.gphone)meta+=' · ولي الأمر: '+fmtPhone(s.gphone);
     return '<div class="student"><div class="avatar">'+esc((s.name||'؟').charAt(0))+'</div>'
-      +'<div class="s-info"><div class="s-name">'+esc(s.name)+'</div><div class="s-meta">'+meta+'</div>'+stuAttInfo(s.id)+'</div>'
-      +'<div class="actions"><button class="mini b" onclick="openQR(\''+s.id+'\')">QR</button><button class="mini b" onclick="moveStudent(\''+s.id+'\')">🔄 نقل</button><button class="mini o" onclick="openEdit(\''+s.id+'\')">✏️</button><button class="del" onclick="delStudent(\''+s.id+'\')">✕</button></div></div>';
+      +'<div class="s-info"><div class="s-name">'+esc(s.name)+'</div><div class="s-meta">'+meta+'</div>'+stuAttInfo(s.id)+'<div class="qrinline">'+qrSvg(s.id,4)+'</div></div>'
+      +'<div class="actions"><button class="mini b" onclick="showQRSheet(\''+s.id+'\')">🖨️ باركود</button><button class="mini b" onclick="openQR(\''+s.id+'\')">QR</button><button class="mini b" onclick="moveStudent(\''+s.id+'\')">🔄 نقل</button><button class="mini o" onclick="openEdit(\''+s.id+'\')">✏️</button><button class="del" onclick="delStudent(\''+s.id+'\')">✕</button></div></div>';
   }).join('');
   const sel=document.getElementById('reportStudent');
   sel.innerHTML='<option value="">اختر طالب…</option>'+students.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join('');
@@ -11119,7 +11136,29 @@ function fillQRGroups(){
   el.innerHTML='<option value="">كل المجموعات</option>'+groups.map(g=>'<option value="'+esc(g.id)+'">'+esc(g.name)+'</option>').join('');
   el.value=cur;
 }
-function printAllQR(){
+let qrSheetList=[];
+function showQRSheet(id){
+  fillQRGroups();
+  const g=document.getElementById('qrPrintGroup');
+  qrSheetList=id?students.filter(x=>x.id===id):students.slice();
+  if(!qrSheetList.length){toast('مفيش طلاب للطباعة');return;}
+  document.getElementById('qrSheetSel').innerHTML=id?'':'<select id="qrSheetGroup" onchange="qrSheetFilter()" style="width:100%;"><option value="">كل المجموعات</option>'+groups.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('')+'</select>';
+  renderQRSheet();
+  document.getElementById('qrSheet').classList.remove('hidden');
+}
+function qrSheetFilter(){
+  const v=document.getElementById('qrSheetGroup').value;
+  qrSheetList=students.filter(x=>!v||x.groupId===v);renderQRSheet();
+}
+function renderQRSheet(){
+  document.getElementById('qrSheetBody').innerHTML='<div class="qgrid">'+qrSheetList.map(qrCard).join('')+'</div>';
+}
+function closeQRSheet(){document.getElementById('qrSheet').classList.add('hidden');}
+function printQRSheet(){
+  if(!qrSheetList.length){toast('مفيش طلاب للطباعة');return;}
+  doPrint('باركود الطلاب','· '+qrSheetList.length+' طالب','<div class="qgrid">'+qrSheetList.map(qrCard).join('')+'</div>');
+}
+function printAllQR(){showQRSheet();return;
   fillQRGroups();
   const gid=document.getElementById('qrPrintGroup').value;
   const list=students.filter(s=>!gid||s.groupId===gid);
@@ -11132,8 +11171,7 @@ function printOneQR(){
   const code=(document.getElementById('qrCode').textContent||'').replace('كود الطالب: ','');
   const id=code.replace('HUDUR:','');
   const s=students.find(x=>x.id===id);if(!s)return;
-  closeQR();
-  doPrint('باركود الطالب','', '<div class="qgrid">'+qrCard(s)+'</div>');
+  closeQR();showQRSheet(s.id);
 }
 setTimeout(fillQRGroups,500);
 </script>
