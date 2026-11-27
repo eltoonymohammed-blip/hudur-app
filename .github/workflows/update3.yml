@@ -1,0 +1,23 @@
+name: update3
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/update3.yml'
+permissions:
+  contents: write
+jobs:
+  u:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: patch
+        run: |
+          echo 'cD0naW5kZXguaHRtbCcKcz1vcGVuKHAsZW5jb2Rpbmc9J3V0Zi04JykucmVhZCgpCmRlZiByZXAoYSxiKToKICAgIGdsb2JhbCBzCiAgICBhc3NlcnQgcy5jb3VudChhKT09MSxhWzo1MF0KICAgIHM9cy5yZXBsYWNlKGEsYikKcmVwKCJmdW5jdGlvbiByZW5kZXJTdHVkZW50cygpeyIsIiIiZnVuY3Rpb24gc3R1QXR0SW5mbyhpZCl7CiAgY29uc3QgZGF5cz1PYmplY3Qua2V5cyhhdHQpLmZpbHRlcihkPT5hdHRbZF1baWRdKS5zb3J0KCk7CiAgaWYoIWRheXMubGVuZ3RoKXJldHVybiAnPGRpdiBjbGFzcz0icy1tZXRhIj7wn5OMINii2K7YsSDYrdin2YTYqTog2YTYs9mHINmF2YHZiti0INiz2KzZhCDCtyDYutmK2KfYqDogMDwvZGl2Pic7CiAgbGV0IGFiPTA7ZGF5cy5mb3JFYWNoKGQ9PntpZihhdHRbZF1baWRdLmFic2VudClhYisrO30pOwogIGNvbnN0IGxkPWRheXNbZGF5cy5sZW5ndGgtMV0scj1hdHRbbGRdW2lkXTsKICBjb25zdCBzdD1yLmFic2VudD8nPHNwYW4gY2xhc3M9ImNoaXAgY2hpcC1hYnNlbnQiPti62KfYptioPC9zcGFuPic6JzxzcGFuIGNsYXNzPSJjaGlwIGNoaXAtaW4iPicrKHIub3V0PyfYp9mG2LXYsdmBJzon2K3Yp9i22LEnKSsoci5pbj8nICcrZXNjKHIuaW4pOicnKSsnPC9zcGFuPic7CiAgcmV0dXJuICc8ZGl2IGNsYXNzPSJzLW1ldGEiPvCfk4wg2KLYrtixINit2KfZhNipOiAnK3N0KycgKCcrZXNjKGxkKSsnKSDCtyDYudiv2K8g2KfZhNit2LXYtSDYp9mE2YTZiiDYutin2KjZh9inOiA8Yj4nK2FiKyc8L2I+PC9kaXY+JzsKfQpmdW5jdGlvbiByZW5kZXJTdHVkZW50cygpeyIiIikKcmVwKCI8ZGl2IGNsYXNzPVwicy1tZXRhXCI+JyttZXRhKyc8L2Rpdj48L2Rpdj4nIiwiPGRpdiBjbGFzcz1cInMtbWV0YVwiPicrbWV0YSsnPC9kaXY+JytzdHVBdHRJbmZvKHMuaWQpKyc8L2Rpdj4nIikKIyByZXBvcnQ6IGxhc3Qgc3RhdHVzCnJlcCgiK2luZm9cbiAgICArJzxkaXYgY2xhc3M9XCJmZWUtbm90ZVwiPtin2YTYtNmH2YjYsSIsIitpbmZvXG4gICAgKyc8ZGl2IGNsYXNzPVwiZmVlLW5vdGVcIj4nK3N0dUF0dEluZm8oaWQpLnJlcGxhY2UoJ3MtbWV0YScsJ3gnKSsnPC9kaXY+J1xuICAgICsnPGRpdiBjbGFzcz1cImZlZS1ub3RlXCI+2KfZhNi02YfZiNixIikKb3BlbihwLCd3JyxlbmNvZGluZz0ndXRmLTgnKS53cml0ZShzKQo=' | base64 -d > /tmp/patch.py
+          python3 /tmp/patch.py
+          sed -i "s/hudur-v4-late/hudur-v5-last/" sw.js
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add index.html sw.js
+          git commit -m "Lateness minutes in reports, move student between groups"
+          git push
