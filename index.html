@@ -10580,6 +10580,14 @@ function openQR(id){
   document.getElementById('qrModal').classList.remove('hidden');
 }
 function closeQR(){document.getElementById('qrModal').classList.add('hidden');}
+function stuAttInfo(id){
+  const days=Object.keys(att).filter(d=>att[d][id]).sort();
+  if(!days.length)return '<div class="s-meta">📌 آخر حالة: لسه مفيش سجل · غياب: 0</div>';
+  let ab=0;days.forEach(d=>{if(att[d][id].absent)ab++;});
+  const ld=days[days.length-1],r=att[ld][id];
+  const st=r.absent?'<span class="chip chip-absent">غائب</span>':'<span class="chip chip-in">'+(r.out?'انصرف':'حاضر')+(r.in?' '+esc(r.in):'')+'</span>';
+  return '<div class="s-meta">📌 آخر حالة: '+st+' ('+esc(ld)+') · عدد الحصص اللي غابها: <b>'+ab+'</b></div>';
+}
 function renderStudents(){
   document.getElementById('stuCount').textContent=students.length;
   fillGroupSelect(document.getElementById('newGroup'),document.getElementById('newGroup').value);
@@ -10590,7 +10598,7 @@ function renderStudents(){
     if(s.phone)meta+=' · طالب: '+fmtPhone(s.phone);
     if(s.gphone)meta+=' · ولي الأمر: '+fmtPhone(s.gphone);
     return '<div class="student"><div class="avatar">'+esc((s.name||'؟').charAt(0))+'</div>'
-      +'<div class="s-info"><div class="s-name">'+esc(s.name)+'</div><div class="s-meta">'+meta+'</div></div>'
+      +'<div class="s-info"><div class="s-name">'+esc(s.name)+'</div><div class="s-meta">'+meta+'</div>'+stuAttInfo(s.id)+'</div>'
       +'<div class="actions"><button class="mini b" onclick="openQR(\''+s.id+'\')">QR</button><button class="mini b" onclick="moveStudent(\''+s.id+'\')">🔄 نقل</button><button class="mini o" onclick="openEdit(\''+s.id+'\')">✏️</button><button class="del" onclick="delStudent(\''+s.id+'\')">✕</button></div></div>';
   }).join('');
   const sel=document.getElementById('reportStudent');
@@ -10917,6 +10925,7 @@ function renderReport(){
     +'<div class="stat b"><b>'+(present+absent?Math.round(present/(present+absent)*100):0)+'%</b><span>نسبة الحضور</span></div></div>'
     +'<div class="stats" style="margin-top:8px;"><div class="stat r"><b>'+lateDays+'</b><span>مرات تأخير</span></div><div class="stat r"><b>'+lateTotal+'</b><span>إجمالي دقائق التأخير</span></div><div class="stat b"><b>'+(lateDays?Math.round(lateTotal/lateDays):0)+'</b><span>متوسط التأخير (د)</span></div></div>'
     +info
+    +'<div class="fee-note">'+stuAttInfo(id).replace('s-meta','x')+'</div>'
     +'<div class="fee-note">الشهور المدفوعة: '+(payMonths.length?payMonths.map(esc).join('، '):'ولا شهر لسه')+'</div>'
     +(rows.length?'<div style="margin-top:8px;"><table><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>التأخير</th></tr>'+rows.join('')+'</table></div>':'<div class="empty">مفيش سجلات حضور للطالب ده لسه.</div>');
 }
