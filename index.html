@@ -80,6 +80,12 @@
     body.printing #printArea{display:block !important;direction:rtl;font-family:"Segoe UI",Tahoma,Arial,sans-serif;color:#000;background:#fff;padding:0;}
     body{background:#fff !important;padding:0 !important;}
     #printArea h2{margin:0 0 4px;font-size:20px;}
+  #printArea .qgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+    #printArea .qcard{border:1px dashed #666;padding:8px;text-align:center;page-break-inside:avoid;break-inside:avoid;}
+    #printArea .qcard svg{width:150px;height:150px;display:block;margin:0 auto 4px;}
+    #printArea .qcard .qn{font-size:15px;font-weight:700;}
+    #printArea .qcard .qg{font-size:11px;color:#444;}
+    #printArea .qcard .qc{font-size:9px;color:#666;direction:ltr;}
     #printArea .pmeta{font-size:12px;color:#444;margin-bottom:10px;}
     #printArea table{width:100%;border-collapse:collapse;font-size:13px;}
     #printArea th,#printArea td{border:1px solid #888;padding:5px 7px;text-align:right;}
@@ -241,6 +247,8 @@
       <button class="btn-primary" style="width:100%;margin-bottom:8px;" onclick="printReport()">🖨️ تقرير الطالب المختار</button>
       <button class="btn-primary" style="width:100%;margin-bottom:8px;" onclick="printLate()">🖨️ ملخص التأخير</button>
       <button class="btn-primary" style="width:100%;margin-bottom:8px;" onclick="printStudents()">🖨️ قائمة الطلاب</button>
+      <div style="display:flex;gap:6px;margin-bottom:8px;"><select id="qrPrintGroup" style="flex:1;" onfocus="fillQRGroups()"><option value="">كل المجموعات</option></select>
+      <button class="btn-primary" style="flex:2;" onclick="printAllQR()">🖨️ باركود الطلاب + الاسم</button></div>
       <button class="btn-primary" style="width:100%;" onclick="printPay()">🖨️ المدفوعات (الشهر المختار في تبويب المدفوعات)</button>
     </div>
     <div class="card">
@@ -276,6 +284,7 @@
     <h3 class="sec" id="qrName"></h3>
     <div id="qrBox"></div>
     <div class="fee-note" id="qrCode"></div>
+    <button class="btn-ghost" style="width:100%;margin-top:12px;" onclick="printOneQR()">🖨️ اطبع الباركود</button>
     <button class="btn-primary" style="width:100%;margin-top:12px;" onclick="closeQR()">تم</button>
   </div>
 </div>
@@ -11065,6 +11074,34 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function(){});
   });
 }
+
+/* ---- Print barcodes ---- */
+var _qrCur=null;
+function qrSvg(id,cell){const q=qrcode(0,'M');q.addData('HUDUR:'+id);q.make();return q.createSvgTag({cellSize:cell||6,margin:2,scalable:true});}
+function qrCard(s){return '<div class="qcard">'+qrSvg(s.id)+'<div class="qn">'+esc(s.name)+'</div><div class="qg">'+esc(groupName(s.groupId))+'</div><div class="qc">HUDUR:'+esc(s.id)+'</div></div>';}
+function fillQRGroups(){
+  const el=document.getElementById('qrPrintGroup');if(!el)return;
+  const cur=el.value;
+  el.innerHTML='<option value="">كل المجموعات</option>'+groups.map(g=>'<option value="'+esc(g.id)+'">'+esc(g.name)+'</option>').join('');
+  el.value=cur;
+}
+function printAllQR(){
+  fillQRGroups();
+  const gid=document.getElementById('qrPrintGroup').value;
+  const list=students.filter(s=>!gid||s.groupId===gid);
+  if(!list.length){toast('مفيش طلاب للطباعة');return;}
+  doPrint('باركود الطلاب',(gid?groupName(gid):'كل المجموعات')+' · '+list.length+' طالب','<div class="qgrid">'+list.map(qrCard).join('')+'</div>');
+}
+function printOneQR(){
+  const el=document.getElementById('qrName');
+  const nm=el?el.textContent:'';
+  const code=(document.getElementById('qrCode').textContent||'').replace('كود الطالب: ','');
+  const id=code.replace('HUDUR:','');
+  const s=students.find(x=>x.id===id);if(!s)return;
+  closeQR();
+  doPrint('باركود الطالب','', '<div class="qgrid">'+qrCard(s)+'</div>');
+}
+setTimeout(fillQRGroups,500);
 </script>
 </body>
 </html>
