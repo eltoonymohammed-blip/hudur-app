@@ -132,7 +132,12 @@
         <input type="text" id="newGroupName" placeholder="اسم المجموعة (مثال: مجموعة السبت)">
         <input type="number" id="newGroupFee" placeholder="اشتراكها الشهري (ج)">
       </div>
-      <button class="btn-primary" style="width:100%;" onclick="addGroup()">إضافة المجموعة</button>
+      <div class="row" style="margin-bottom:8px;">
+        <label style="flex:1;font-size:13px;">من الساعة<input type="time" id="newGroupStart"></label>
+        <label style="flex:1;font-size:13px;">إلى الساعة<input type="time" id="newGroupEnd"></label>
+      </div>
+      <div id="newGroupDays" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;font-size:13px;"></div>
+      <button class="btn-primary" id="grpSaveBtn" style="width:100%;" onclick="addGroup()">إضافة المجموعة</button>
       <div class="fee-note">اشتراك المجموعة بيتحسب تلقائي لأي طالب فيها. ولو لطالب اشتراك مختلف، اكتبه في بياناته من زر ✏️.</div>
     </div>
     <div class="card">
@@ -10424,13 +10429,64 @@ function chipsHTML(cur,tab){
 }
 
 /* ---- Groups ---- */
+const DAYN=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+let editingGroup='';
+function renderDayBoxes(sel){
+  document.getElementById('newGroupDays').innerHTML=DAYN.map((d,i)=>'<label style="display:flex;align-items:center;gap:3px;background:#eef;padding:4px 8px;border-radius:14px;"><input type="checkbox" class="gday" value="'+i+'"'+((sel||[]).indexOf(i)>-1?' checked':'')+'>'+d+'</label>').join('');
+}
+function schedText(g){
+  let t='';
+  if(g.days&&g.days.length)t+=g.days.map(i=>DAYN[i]).join('، ');
+  if(g.start)t+=(t?' · ':'')+'من '+g.start+(g.end?' إلى '+g.end:'');
+  return t;
+}
+function clearGroupForm(){
+  editingGroup='';
+  ['newGroupName','newGroupFee','newGroupStart','newGroupEnd'].forEach(i=>document.getElementById(i).value='');
+  renderDayBoxes([]);document.getElementById('grpSaveBtn').textContent='إضافة المجموعة';
+}
 function addGroup(){
   const n=document.getElementById('newGroupName').value.trim();
   const f=document.getElementById('newGroupFee').value.trim();
-  if(!n){toast('اكتب اسم المجموعة الأول');return;}
-  groups.push({id:gid(),name:n,fee:f});
-  document.getElementById('newGroupName').value='';document.getElementById('newGroupFee').value='';
-  save();renderGroups();renderStudents();toast('اتضافت المجموعة ✅');
+  if(!n){toast('اكتب اسم المجموعة');return;}
+  const st=document.getElementById('newGroupStart').value,en=document.getElementById('newGroupEnd').value;
+  const days=[].slice.call(document.querySelectorAll('.gday:checked')).map(x=>+x.value);
+  if(editingGroup){
+    const g=groups.find(x=>x.id===editingGroup);
+    if(g){g.name=n;g.fee=f;g.start=st;g.end=en;g.days=days;}
+  }else groups.push({id:gid(),name:n,fee:f,start:st,end:en,days:days});
+  const wasEdit=!!editingGroup;
+  clearGroupForm();
+  save();renderGroups();renderStudents();renderToday();toast(wasEdit?'اتحفظت التعديلات ✅':'اتضافت المجموعة ✅');
+}
+function editGroup(id){
+  const g=groups.find(x=>x.id===id);if(!g)return;
+  editingGroup=id;
+  document.getElementById('newGroupName').value=g.name;
+  document.getElementById('newGroupFee').value=g.fee||'';
+  document.getElementById('newGroupStart').value=g.start||'';
+  document.getElementById('newGroupEnd').value=g.end||'';
+  renderDayBoxes(g.days||[]);
+  document.getElementById('grpSaveBtn').textContent='حفظ التعديلات';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function timeToMin(t){const m=/^(\d{1,2}):(\d{2})$/.exec(t||'');return m?(+m[1])*60+(+m[2]):null;}
+function lateChip(s,r){
+  if(!r||!r.in||r.absent)return '';
+  const g=groups.find(x=>x.id===s.groupId);
+  if(!g||!g.start)return '';
+  const d=timeToMin(r.in)-timeToMin(g.start);
+  if(d>0)return ' <span class="chip chip-absent">متأخر '+d+' د</span>';
+  return '';
+}
+function editTime(id,field){
+  const rec=dayRec(todayKey());const r=rec[id];if(!r)return;
+  const v=prompt(field==='in'?'وقت الحضور (مثال 16:30)':'وقت الانصراف (مثال 18:00)',r[field]||nowTime());
+  if(v===null)return;
+  const t=v.trim().replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+  const m=/^(\d{1,2}):(\d{2})$/.exec(t);
+  if(!m||+m[1]>23||+m[2]>59){toast('اكتب الوقت بالشكل ده 16:30');return;}
+  r[field]=pad(+m[1])+':'+m[2];save();renderToday();toast('اتعدل الوقت ✅');
 }
 function delGroup(id){
   if(!confirm('حذف المجموعة؟ الطلاب اللي فيها هيبقوا "بدون مجموعة" وبياناتهم هتفضل.'))return;
@@ -10446,7 +10502,7 @@ function renderGroups(){
   if(groups.length===0&&ungrouped===0){list.innerHTML='<div class="empty">مفيش مجموعات لسه. ضيف أول مجموعة فوق.</div>';return;}
   let h=groups.map(g=>{
     const c=students.filter(s=>s.groupId===g.id).length;
-    return '<div class="student"><div class="avatar">👥</div><div class="s-info"><div class="s-name">'+esc(g.name)+'</div><div class="s-meta">'+c+' طالب'+(g.fee?' · الاشتراك '+esc(String(g.fee))+' ج':'')+'</div></div><div class="actions"><button class="del" onclick="delGroup(\''+g.id+'\')">✕</button></div></div>';
+    return '<div class="student"><div class="avatar">👥</div><div class="s-info"><div class="s-name">'+esc(g.name)+'</div><div class="s-meta">'+c+' طالب'+(g.fee?' · الاشتراك '+esc(String(g.fee))+' ج':'')+(schedText(g)?'<br>🕒 '+esc(schedText(g)):'')+'</div></div><div class="actions"><button class="mini o" onclick="editGroup(\''+g.id+'\')">✏️</button><button class="del" onclick="delGroup(\''+g.id+'\')">✕</button></div></div>';
   }).join('');
   if(ungrouped)h+='<div class="student"><div class="avatar">—</div><div class="s-info"><div class="s-name">بدون مجموعة</div><div class="s-meta">'+ungrouped+' طالب</div></div><div class="actions"></div></div>';
   list.innerHTML=h;
@@ -10558,12 +10614,13 @@ function renderToday(){
     const r=rec[s.id];
     if(r&&r.absent)abC++;else if(r&&r.out)outC++;else if(r&&r.in)inC++;
     return '<div class="student"><div class="avatar">'+esc((s.name||'؟').charAt(0))+'</div>'
-      +'<div class="s-info"><div class="s-name">'+esc(s.name)+'</div><div class="s-meta">'+esc(groupName(s.groupId))+' '+statusChip(r)+'</div></div>'
+      +'<div class="s-info"><div class="s-name">'+esc(s.name)+'</div><div class="s-meta">'+esc(groupName(s.groupId))+(function(){const g=groups.find(x=>x.id===s.groupId);return g&&g.start?' 🕒 '+esc(g.start):'';})()+' '+statusChip(r)+lateChip(s,r)+'</div></div>'
       +'<div class="actions">'
       +((!r||(!r.in&&!r.absent))?'<button class="mini g" onclick="mark(\''+s.id+'\',\'in\')">حضور</button>':'')
       +((r&&r.in&&!r.out)?'<button class="mini b" onclick="mark(\''+s.id+'\',\'out\')">انصراف</button>':'')
       +((!r||(!r.in&&!r.absent))?'<button class="mini r" onclick="mark(\''+s.id+'\',\'absent\')">غائب</button>':'')
       +((r&&r.absent&&(s.gphone||s.phone))?'<button class="mini w" onclick="waGuardian(\''+s.id+'\')">📲 واتساب</button>':'')
+      +((r&&r.in&&!r.absent)?'<button class="mini o" onclick="editTime(\''+s.id+'\',\''+(r.out?'out':'in')+'\')">⏱ تعديل الوقت</button>':'')
       +((r&&(r.in||r.absent))?'<button class="mini o" onclick="mark(\''+s.id+'\',\'undo\')">تراجع</button>':'')
       +'</div></div>';
   }).join('');
@@ -10873,7 +10930,7 @@ function clearAll(){
   document.getElementById('histDate').value=todayKey();
   document.getElementById('payMonth').value=monthKey();
   document.getElementById('followMonth').value=monthKey();
-  fillGroupSelect(document.getElementById('newGroup'),'');
+  fillGroupSelect(document.getElementById('newGroup'),'');renderDayBoxes([]);
   document.getElementById('waTemplate').value=settings.waTemplate||DEFAULT_TEMPLATE;
   renderToday();renderStudents();renderGroups();renderPay();
   document.getElementById('newName').addEventListener('keydown',e=>{if(e.key==='Enter')addStudent();});
